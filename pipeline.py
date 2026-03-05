@@ -1,8 +1,3 @@
-"""
-House Price Predictor - Full ML Pipeline
-Author: Sebastián Mayorga Castro
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -28,7 +23,7 @@ os.makedirs(OUTPUTS_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR,  exist_ok=True)
 
 
-# ── Helper: get column regardless of spacing style ────────────────────────────
+# Helper function: get column regardless of spacing style 
 def col(df, *candidates):
     """Return the first candidate column name that exists in df, else None."""
     for c in candidates:
@@ -36,23 +31,15 @@ def col(df, *candidates):
             return c
     return None
 
-
-# ══════════════════════════════════════════════════════════════════════════════
 # 1. DATA LOADING
-# ══════════════════════════════════════════════════════════════════════════════
-
 def load_data(filepath: str) -> pd.DataFrame:
     df = pd.read_csv(filepath)
-    print(f"✅ Dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
+    print(f" Dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
     return df
 
-
-# ══════════════════════════════════════════════════════════════════════════════
 # 2. EDA
-# ══════════════════════════════════════════════════════════════════════════════
-
 def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
-    print("\n📊  Running EDA …")
+    print("\n Running EDA …")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle("Exploratory Data Analysis — House Prices", fontsize=16, fontweight="bold")
 
@@ -69,11 +56,11 @@ def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
     missing = df.isnull().sum()
     missing = missing[missing > 0].sort_values(ascending=False).head(20)
     if not missing.empty:
-        axes[1, 0].barh(missing.index, missing.values, color="#9BBB59", edgecolor="white")
+        axes[1, 0].barh(missing.index[::-1], missing.values[::-1], color="#9BBB59", edgecolor="white")
         axes[1, 0].set_title("Top 20 Columns with Missing Values")
         axes[1, 0].set_xlabel("Count")
     else:
-        axes[1, 0].text(0.5, 0.5, "No missing values 🎉", ha="center", va="center", fontsize=14)
+        axes[1, 0].text(0.5, 0.5, "No missing values", ha="center", va="center", fontsize=14)
         axes[1, 0].set_title("Missing Values")
 
     numeric_df = df.select_dtypes(include=[np.number])
@@ -85,7 +72,7 @@ def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
     plt.tight_layout()
     path = os.path.join(OUTPUTS_DIR, "eda_overview.png")
     plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close()
+    plt.close() 
     print(f"   Saved → {path}")
 
 
