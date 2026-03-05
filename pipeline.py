@@ -1,19 +1,20 @@
+"""
+House Price Predictor - Full ML Pipeline
+Author: Sebastián Mayorga Castro
+"""
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.impute import SimpleImputer
-import warnings
-import os
-import pickle
+import warnings, os, pickle
 warnings.filterwarnings("ignore")
 
-# ── Try importing XGBoost (optional) ───────────────────────────────────────────
 try:
     from xgboost import XGBRegressor
     XGBOOST_AVAILABLE = True
@@ -27,12 +28,20 @@ os.makedirs(OUTPUTS_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR,  exist_ok=True)
 
 
+# ── Helper: get column regardless of spacing style ────────────────────────────
+def col(df, *candidates):
+    """Return the first candidate column name that exists in df, else None."""
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return None
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. DATA LOADING
 # ══════════════════════════════════════════════════════════════════════════════
 
 def load_data(filepath: str) -> pd.DataFrame:
-    """Load dataset and return a DataFrame."""
     df = pd.read_csv(filepath)
     print(f"✅ Dataset loaded: {df.shape[0]} rows × {df.shape[1]} columns")
     return df
@@ -43,25 +52,20 @@ def load_data(filepath: str) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
-    """Generate and save EDA charts."""
     print("\n📊  Running EDA …")
-
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle("Exploratory Data Analysis — House Prices", fontsize=16, fontweight="bold")
 
-    # (a) Target distribution
     axes[0, 0].hist(df[target_col], bins=50, color="#4F81BD", edgecolor="white", alpha=0.85)
     axes[0, 0].set_title("Target Distribution (SalePrice)")
     axes[0, 0].set_xlabel("Sale Price ($)")
     axes[0, 0].set_ylabel("Frequency")
 
-    # (b) Log-transformed target
     axes[0, 1].hist(np.log1p(df[target_col]), bins=50, color="#C0504D", edgecolor="white", alpha=0.85)
     axes[0, 1].set_title("Log-Transformed SalePrice")
     axes[0, 1].set_xlabel("log(1 + SalePrice)")
     axes[0, 1].set_ylabel("Frequency")
 
-    # (c) Missing values heatmap (top 20 columns)
     missing = df.isnull().sum()
     missing = missing[missing > 0].sort_values(ascending=False).head(20)
     if not missing.empty:
@@ -72,7 +76,6 @@ def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
         axes[1, 0].text(0.5, 0.5, "No missing values 🎉", ha="center", va="center", fontsize=14)
         axes[1, 0].set_title("Missing Values")
 
-    # (d) Correlation with target (top 15 numeric)
     numeric_df = df.select_dtypes(include=[np.number])
     corr = numeric_df.corr()[target_col].drop(target_col).abs().sort_values(ascending=False).head(15)
     axes[1, 1].barh(corr.index[::-1], corr.values[::-1], color="#4BACC6", edgecolor="white")
@@ -88,47 +91,55 @@ def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. FEATURE ENGINEERING
+# Works with both Ames naming styles:
+#   "Gr Liv Area" (spaced)  OR  "GrLivArea" (camelcase)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Create new features and handle missing data."""
     print("\n⚙️  Feature Engineering …")
     df = df.copy()
 
-    # ── New derived features ──────────────────────────────────────────────────
-    if "YearBuilt" in df.columns:
-        df["HouseAge"]        = df["YrSold"].fillna(2010) - df["YearBuilt"]
-    if "YearRemodAdd" in df.columns:
-        df["YearsSinceRemod"] = df["YrSold"].fillna(2010) - df["YearRemodAdd"]
-    if {"GrLivArea", "TotalBsmtSF"}.issubset(df.columns):
-        df["TotalSF"]         = df["GrLivArea"] + df["TotalBsmtSF"].fillna(0)
-    if {"BsmtFullBath", "BsmtHalfBath", "FullBath", "HalfBath"}.issubset(df.columns):
-        df["TotalBaths"]      = (df["BsmtFullBath"].fillna(0)
-                                 + 0.5 * df["BsmtHalfBath"].fillna(0)
-                                 + df["FullBath"].fillna(0)
-                                 + 0.5 * df["HalfBath"].fillna(0))
-    if {"1stFlrSF", "2ndFlrSF"}.issubset(df.columns):
-        df["HasSecondFloor"]  = (df["2ndFlrSF"] > 0).astype(int)
-    if {"GarageArea"}.issubset(df.columns):
-        df["HasGarage"]       = (df["GarageArea"].fillna(0) > 0).astype(int)
-    if {"PoolArea"}.issubset(df.columns):
-        df["HasPool"]         = (df["PoolArea"].fillna(0) > 0).astype(int)
+    yr_sold  = col(df, "Yr Sold",        "YrSold")
+    yr_built = col(df, "Year Built",     "YearBuilt")
+    yr_remod = col(df, "Year Remod/Add", "YearRemodAdd")
+    liv_area = col(df, "Gr Liv Area",    "GrLivArea")
+    bsmt_sf  = col(df, "Total Bsmt SF",  "TotalBsmtSF")
+    bsmt_fb  = col(df, "Bsmt Full Bath", "BsmtFullBath")
+    bsmt_hb  = col(df, "Bsmt Half Bath", "BsmtHalfBath")
+    full_b   = col(df, "Full Bath")
+    half_b   = col(df, "Half Bath")
+    flr2     = col(df, "2nd Flr SF",     "2ndFlrSF")
+    gar_area = col(df, "Garage Area",    "GarageArea")
+    pool_a   = col(df, "Pool Area",      "PoolArea")
+
+    if yr_built and yr_sold:
+        df["HouseAge"] = df[yr_sold].fillna(2010) - df[yr_built]
+    if yr_remod and yr_sold:
+        df["YearsSinceRemod"] = df[yr_sold].fillna(2010) - df[yr_remod]
+    if liv_area and bsmt_sf:
+        df["TotalSF"] = df[liv_area] + df[bsmt_sf].fillna(0)
+    if all([bsmt_fb, bsmt_hb, full_b, half_b]):
+        df["TotalBaths"] = (df[bsmt_fb].fillna(0) + 0.5 * df[bsmt_hb].fillna(0)
+                            + df[full_b].fillna(0) + 0.5 * df[half_b].fillna(0))
+    if flr2:
+        df["HasSecondFloor"] = (df[flr2] > 0).astype(int)
+    if gar_area:
+        df["HasGarage"] = (df[gar_area].fillna(0) > 0).astype(int)
+    if pool_a:
+        df["HasPool"] = (df[pool_a].fillna(0) > 0).astype(int)
 
     new_feats = [c for c in ["HouseAge","YearsSinceRemod","TotalSF",
                               "TotalBaths","HasSecondFloor","HasGarage","HasPool"]
                  if c in df.columns]
     print(f"   Created {len(new_feats)} new features: {new_feats}")
 
-    # ── Encode categoricals ───────────────────────────────────────────────────
-    cat_cols = df.select_dtypes(include=["object"]).columns.tolist()
-    for col in cat_cols:
-        df[col] = df[col].fillna("None")
-        df[col] = LabelEncoder().fit_transform(df[col].astype(str))
+    # Encode categoricals
+    for c in df.select_dtypes(include=["object"]).columns:
+        df[c] = LabelEncoder().fit_transform(df[c].fillna("None").astype(str))
 
-    # ── Impute remaining numeric NaNs ─────────────────────────────────────────
+    # Impute numeric NaNs
     num_cols = df.select_dtypes(include=[np.number]).columns
-    imputer  = SimpleImputer(strategy="median")
-    df[num_cols] = imputer.fit_transform(df[num_cols])
+    df[num_cols] = SimpleImputer(strategy="median").fit_transform(df[num_cols])
 
     print(f"   Final shape: {df.shape}")
     return df
@@ -138,8 +149,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 # 4. MODELING
 # ══════════════════════════════════════════════════════════════════════════════
 
-def train_models(X_train, X_test, y_train, y_test) -> dict:
-    """Train multiple models, return results dict."""
+def train_models(X_train, X_test, y_train, y_test):
     print("\n🤖  Training models …")
 
     models = {
@@ -152,28 +162,24 @@ def train_models(X_train, X_test, y_train, y_test) -> dict:
     }
     if XGBOOST_AVAILABLE:
         models["XGBoost"] = XGBRegressor(n_estimators=300, learning_rate=0.05,
-                                          max_depth=6, subsample=0.8,
-                                          colsample_bytree=0.8, random_state=42,
-                                          eval_metric="rmse", verbosity=0)
+                                          max_depth=6, subsample=0.8, colsample_bytree=0.8,
+                                          random_state=42, eval_metric="rmse", verbosity=0)
 
-    scaler  = StandardScaler()
+    scaler = StandardScaler()
     X_train_s = scaler.fit_transform(X_train)
     X_test_s  = scaler.transform(X_test)
 
-    results  = {}
+    results = {}
     best_rmse, best_name, best_model = np.inf, None, None
 
     for name, model in models.items():
         Xtr = X_train_s if name in ("Linear Regression", "Ridge Regression") else X_train
         Xte = X_test_s  if name in ("Linear Regression", "Ridge Regression") else X_test
-
         model.fit(Xtr, y_train)
         preds = model.predict(Xte)
-
         rmse = np.sqrt(mean_squared_error(y_test, preds))
         mae  = mean_absolute_error(y_test, preds)
         r2   = r2_score(y_test, preds)
-
         results[name] = {"model": model, "preds": preds, "rmse": rmse, "mae": mae, "r2": r2}
         flag = ""
         if rmse < best_rmse:
@@ -181,7 +187,6 @@ def train_models(X_train, X_test, y_train, y_test) -> dict:
             flag = " ⭐"
         print(f"   {name:<22}  RMSE=${rmse:>10,.0f}  MAE=${mae:>9,.0f}  R²={r2:.4f}{flag}")
 
-    # Save best model + scaler
     with open(os.path.join(MODELS_DIR, "best_model.pkl"), "wb") as f:
         pickle.dump({"model": best_model, "scaler": scaler, "name": best_name}, f)
     print(f"\n   Best model: {best_name}  (RMSE=${best_rmse:,.0f})")
@@ -192,11 +197,10 @@ def train_models(X_train, X_test, y_train, y_test) -> dict:
 # 5. EVALUATION PLOTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def plot_results(results: dict, best_name: str, X_test, y_test, feature_names) -> None:
-    """Generate evaluation plots and save to outputs/."""
+def plot_results(results, best_name, X_test, y_test, feature_names):
     print("\n📈  Generating evaluation plots …")
 
-    # ── (a) Model comparison bar chart ────────────────────────────────────────
+    # Model comparison
     fig, ax = plt.subplots(figsize=(10, 5))
     names  = list(results.keys())
     rmses  = [results[n]["rmse"] for n in names]
@@ -213,7 +217,7 @@ def plot_results(results: dict, best_name: str, X_test, y_test, feature_names) -
 
     best = results[best_name]
 
-    # ── (b) Predicted vs Actual ────────────────────────────────────────────────
+    # Predicted vs Actual
     fig, ax = plt.subplots(figsize=(8, 7))
     ax.scatter(y_test, best["preds"], alpha=0.4, color="#4F81BD", edgecolors="none", s=20)
     mn, mx = y_test.min(), y_test.max()
@@ -226,7 +230,7 @@ def plot_results(results: dict, best_name: str, X_test, y_test, feature_names) -
     plt.savefig(os.path.join(OUTPUTS_DIR, "predicted_vs_actual.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # ── (c) Residual plot ──────────────────────────────────────────────────────
+    # Residuals
     residuals = y_test - best["preds"]
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].scatter(best["preds"], residuals, alpha=0.4, color="#9BBB59", edgecolors="none", s=20)
@@ -236,13 +240,11 @@ def plot_results(results: dict, best_name: str, X_test, y_test, feature_names) -
     axes[0].set_ylabel("Residuals ($)")
     axes[1].hist(residuals, bins=50, color="#4BACC6", edgecolor="white", alpha=0.85)
     axes[1].set_title("Residuals Distribution")
-    axes[1].set_xlabel("Residual ($)")
-    axes[1].set_ylabel("Frequency")
     plt.tight_layout()
     plt.savefig(os.path.join(OUTPUTS_DIR, "residuals.png"), dpi=150, bbox_inches="tight")
     plt.close()
 
-    # ── (d) Feature importance ────────────────────────────────────────────────
+    # Feature importance
     model_obj = best["model"]
     if hasattr(model_obj, "feature_importances_"):
         imp = pd.Series(model_obj.feature_importances_, index=feature_names)
@@ -268,13 +270,10 @@ def run_pipeline(filepath: str, target_col: str = "SalePrice") -> None:
     run_eda(df_raw, target_col)
 
     df = engineer_features(df_raw)
+    X  = df.drop(columns=[target_col, "Order", "PID"], errors="ignore")
+    y  = df[target_col]
 
-    X = df.drop(columns=[target_col, "Id"], errors="ignore")
-    y = df[target_col]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     print(f"\n   Train: {X_train.shape}  |  Test: {X_test.shape}")
 
     results, best_name = train_models(X_train, X_test, y_train, y_test)
