@@ -14,6 +14,8 @@
 Predict residential property prices using structural, locational, and condition-based features.  
 The target variable is `SalePrice` (USD) from the well-known **Ames, Iowa** housing dataset (~1,460 training samples, 79 features).
 
+Dataset: https://www.kaggle.com/datasets/shashanknecrothapa/ames-housing-dataset?resource=download&select=AmesHousing.csv
+
 ---
 
 ## Approach
