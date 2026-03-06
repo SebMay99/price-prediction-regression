@@ -114,13 +114,6 @@ python src/pipeline.py data/train.csv
 # 5. Launch the app
 streamlit run app.py
 ```
-
----
-
-## Try it Live
-
-🔗 **[Streamlit Cloud deployment — link here after deploy]**
-
 ---
 
 ## Results
