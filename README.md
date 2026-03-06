@@ -1,4 +1,4 @@
-# 🏠 House Price Predictor
+# House Price Predictor
 
 > End-to-end ML regression pipeline with an interactive Streamlit app — Ames Housing Dataset
 
@@ -45,7 +45,7 @@ Additional preprocessing: median imputation for numeric NaNs, label encoding for
 | Ridge Regression | L2 regularisation (α = 10) |
 | Random Forest | 200 trees, max_depth 15 |
 | Gradient Boosting | 300 estimators, lr = 0.05 |
-| **XGBoost** ⭐ | **Best performer** |
+| **XGBoost**| **Best performer** |
 
 ### 4. Results (held-out test set, 20%)
 
