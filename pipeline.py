@@ -76,14 +76,10 @@ def run_eda(df: pd.DataFrame, target_col: str = "SalePrice") -> None:
     print(f"   Saved → {path}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
 # 3. FEATURE ENGINEERING
-# Works with both Ames naming styles:
-#   "Gr Liv Area" (spaced)  OR  "GrLivArea" (camelcase)
-# ══════════════════════════════════════════════════════════════════════════════
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    print("\n⚙️  Feature Engineering …")
+    print("\n Feature Engineering …")
     df = df.copy()
 
     yr_sold  = col(df, "Yr Sold",        "YrSold")
