@@ -17,6 +17,9 @@ The target variable is `SalePrice` (USD) from the well-known **Ames, Iowa** hous
 Dataset: https://www.kaggle.com/datasets/shashanknecrothapa/ames-housing-dataset?resource=download&select=AmesHousing.csv
 
 ---
+## Try the app
+
+https://price-prediction-regression-k8pstck9x5rzja77gvh3we.streamlit.app/
 
 ## Approach
 
